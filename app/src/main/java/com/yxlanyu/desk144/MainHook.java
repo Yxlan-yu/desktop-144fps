@@ -2,7 +2,6 @@ package com.yxlanyu.desk144;
 
 import android.view.Surface;
 import android.view.SurfaceControl;
-import android.view.ViewRootImpl;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -20,29 +19,34 @@ public class MainHook implements IXposedHookLoadPackage {
             return;
         }
         XposedBridge.log("[desk144] attach com.miui.home");
-        XposedHelpers.findAndHookMethod(ViewRootImpl.class, "performTraversals",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        long now = System.currentTimeMillis();
-                        if (now - lastApply < 1000) {
-                            return;
-                        }
-                        try {
-                            Object sc = XposedHelpers.callMethod(param.thisObject, "getSurfaceControl");
-                            if (sc instanceof SurfaceControl) {
-                                SurfaceControl.Transaction t = new SurfaceControl.Transaction();
-                                // 120Hz: matches SurfaceFlinger primary mode; removes category-90 stutter.
-                                // Change to 144.0f if you prefer max refresh on capable panels.
-                                t.setFrameRate((SurfaceControl) sc, 120.0f,
-                                        Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
-                                        Surface.CHANGE_FRAME_RATE_ALWAYS);
-                                t.apply();
-                                lastApply = now;
+        try {
+            final Class<?> vri = Class.forName("android.view.ViewRootImpl");
+            XposedHelpers.findAndHookMethod(vri, "performTraversals",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            long now = System.currentTimeMillis();
+                            if (now - lastApply < 1000) {
+                                return;
                             }
-                        } catch (Throwable ignore) {
+                            try {
+                                Object sc = XposedHelpers.callMethod(param.thisObject, "getSurfaceControl");
+                                if (sc instanceof SurfaceControl) {
+                                    SurfaceControl.Transaction t = new SurfaceControl.Transaction();
+                                    // 120Hz: matches SurfaceFlinger primary mode; removes category-90 stutter.
+                                    // Change to 144.0f if you prefer max refresh on capable panels.
+                                    t.setFrameRate((SurfaceControl) sc, 120.0f,
+                                            Surface.FRAME_RATE_COMPATIBILITY_DEFAULT,
+                                            Surface.CHANGE_FRAME_RATE_ALWAYS);
+                                    t.apply();
+                                    lastApply = now;
+                                }
+                            } catch (Throwable ignore) {
+                            }
                         }
-                    }
-                });
+                    });
+        } catch (Throwable t) {
+            XposedBridge.log("[desk144] hook setup failed: " + t);
+        }
     }
 }
